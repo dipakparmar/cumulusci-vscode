@@ -1,0 +1,351 @@
+{
+  "name": "cumulusci",
+  "displayName": "CumulusCI Explorer",
+  "description": "CumulusCI extension for Visual Studio Code",
+  "version": "0.0.1",
+  "publisher": "dipakparmar",
+  "repository": "https://github.com/dipakparmar/cumulusci-vscode",
+  "icon": "media/images/cci-logo.png",
+  "license": "SEE LICENSE FILE",
+  "engines": {
+    "vscode": "^1.105.0"
+  },
+  "categories": [
+    "Other"
+  ],
+   "activationEvents": [
+    "onView:cumulusci.orgs",
+    "onView:cumulusci.tasks",
+    "onView:cumulusci.flows",
+    "onView:cumulusci.project",
+    "onView:cumulusci.services",
+    "onCommand:cumulusci.refreshOrgs",
+    "onCommand:cumulusci.refreshTasks",
+    "onCommand:cumulusci.refreshFlows",
+    "onCommand:cumulusci.runTask",
+    "onCommand:cumulusci.copyTaskCommand",
+    "onCommand:cumulusci.runFlow",
+    "onCommand:cumulusci.copyFlowCommand",
+    "onCommand:cumulusci.org.showActions",
+    "onCommand:cumulusci.org.openInBrowser",
+    "onCommand:cumulusci.org.showInfo",
+    "onCommand:cumulusci.org.setDefault",
+    "onCommand:cumulusci.copyOrgAlias",
+    "onCommand:cumulusci.refreshProjectInfo",
+    "onCommand:cumulusci.refreshServices",
+    "onCommand:cumulusci.service.showInfo",
+    "onCommand:cumulusci.service.connect",
+    "onCommand:cumulusci.service.setDefault",
+    "onCommand:cumulusci.service.remove",
+    "onCommand:cumulusci.service.rename",
+    "onCommand:cumulusci.status.showDefaultOrg"
+  ],
+  "main": "./dist/extension.js",
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "cumulusci.refreshOrgs",
+        "title": "Refresh Orgs",
+        "icon": {
+          "light": "resources/light/refresh.svg",
+          "dark": "resources/dark/refresh.svg"
+        }
+      },
+      {
+        "command": "cumulusci.refreshTasks",
+        "title": "Refresh Tasks",
+        "icon": {
+          "light": "resources/light/refresh.svg",
+          "dark": "resources/dark/refresh.svg"
+        }
+      },
+      {
+        "command": "cumulusci.refreshFlows",
+        "title": "Refresh Flows",
+        "icon": {
+          "light": "resources/light/refresh.svg",
+          "dark": "resources/dark/refresh.svg"
+        }
+      },
+      {
+        "command": "cumulusci.refreshServices",
+        "title": "Refresh Services",
+        "icon": {
+          "light": "resources/light/refresh.svg",
+          "dark": "resources/dark/refresh.svg"
+        }
+      },
+      {
+        "command": "cumulusci.runTask",
+        "title": "Run Task",
+        "icon": {
+          "light": "resources/light/run.svg",
+          "dark": "resources/dark/run.svg"
+        }
+      },
+      {
+        "command": "cumulusci.copyTaskCommand",
+        "title": "Copy Task Command"
+      },
+      {
+        "command": "cumulusci.runFlow",
+        "title": "Run Flow",
+        "icon": {
+          "light": "resources/light/run.svg",
+          "dark": "resources/dark/run.svg"
+        }
+      },
+      {
+        "command": "cumulusci.copyFlowCommand",
+        "title": "Copy Flow Command"
+      },
+      {
+        "command": "cumulusci.org.showActions",
+        "title": "Org Actions"
+      },
+      {
+        "command": "cumulusci.org.openInBrowser",
+        "title": "Open Org in Browser"
+      },
+      {
+        "command": "cumulusci.org.showInfo",
+        "title": "Show Org Info"
+      },
+      {
+        "command": "cumulusci.org.setDefault",
+        "title": "Set Org as Default"
+      },
+      {
+        "command": "cumulusci.copyOrgAlias",
+        "title": "Copy Org Alias"
+      },
+      {
+        "command": "cumulusci.refreshProjectInfo",
+        "title": "Refresh Project Info",
+        "icon": {
+          "light": "resources/light/refresh.svg",
+          "dark": "resources/dark/refresh.svg"
+        }
+      },
+      {
+        "command": "cumulusci.service.showInfo",
+        "title": "Show Service Info"
+      },
+      {
+        "command": "cumulusci.service.connect",
+        "title": "Connect Service"
+      },
+      {
+        "command": "cumulusci.service.setDefault",
+        "title": "Set Service Default"
+      },
+      {
+        "command": "cumulusci.service.remove",
+        "title": "Remove Service"
+      },
+      {
+        "command": "cumulusci.service.rename",
+        "title": "Rename Service"
+      },
+      {
+        "command": "cumulusci.status.showDefaultOrg",
+        "title": "Show Default Org Details"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cumulusci",
+          "title": "CumulusCI Explorer",
+          "icon": "media/images/cci-logo.png"
+        }
+      ]
+    },
+    "views": {
+      "cumulusci": [
+        {
+          "id": "cumulusci.orgs",
+          "name": "Orgs",
+          "icon": "globe"
+        },
+        {
+          "id": "cumulusci.tasks",
+          "name": "Tasks",
+          "icon": "checklist"
+        },
+        {
+          "id": "cumulusci.flows",
+          "name": "Flows",
+          "icon": "flow"
+        },
+        {
+          "id": "cumulusci.project",
+          "name": "Project Info",
+          "icon": "project"
+        },
+        {
+          "id": "cumulusci.services",
+          "name": "Services",
+          "icon": "server"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "cumulusci.refreshOrgs",
+          "when": "view == cumulusci.orgs",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cumulusci.refreshTasks",
+          "when": "view == cumulusci.tasks",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cumulusci.refreshFlows",
+          "when": "view == cumulusci.flows",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cumulusci.refreshProjectInfo",
+          "when": "view == cumulusci.project",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cumulusci.refreshServices",
+          "when": "view == cumulusci.services",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cumulusci.service.connect",
+          "when": "view == cumulusci.services",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "cumulusci.runTask",
+          "when": "view == cumulusci.tasks && viewItem == cumulusci.task",
+          "group": "inline@1"
+        },
+        {
+          "command": "cumulusci.copyTaskCommand",
+          "when": "view == cumulusci.tasks && viewItem == cumulusci.task",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cumulusci.runFlow",
+          "when": "view == cumulusci.flows && viewItem == cumulusci.flow",
+          "group": "inline@1"
+        },
+        {
+          "command": "cumulusci.copyFlowCommand",
+          "when": "view == cumulusci.flows && viewItem == cumulusci.flow",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cumulusci.org.showActions",
+          "when": "view == cumulusci.orgs && viewItem == cumulusci.org",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cumulusci.org.openInBrowser",
+          "when": "view == cumulusci.orgs && viewItem == cumulusci.org",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cumulusci.org.showInfo",
+          "when": "view == cumulusci.orgs && viewItem == cumulusci.org",
+          "group": "navigation@3"
+        },
+        {
+          "command": "cumulusci.org.setDefault",
+          "when": "view == cumulusci.orgs && viewItem == cumulusci.org",
+          "group": "navigation@4"
+        },
+        {
+          "command": "cumulusci.copyOrgAlias",
+          "when": "view == cumulusci.orgs && viewItem == cumulusci.org",
+          "group": "navigation@5"
+        },
+        {
+          "command": "cumulusci.service.connect",
+          "when": "view == cumulusci.services && viewItem == cumulusci.serviceType",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cumulusci.service.showInfo",
+          "when": "view == cumulusci.services && viewItem == cumulusci.service",
+          "group": "inline@1"
+        },
+        {
+          "command": "cumulusci.service.showInfo",
+          "when": "view == cumulusci.services && viewItem == cumulusci.service.default",
+          "group": "inline@1"
+        },
+        {
+          "command": "cumulusci.service.setDefault",
+          "when": "view == cumulusci.services && viewItem == cumulusci.service",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cumulusci.service.setDefault",
+          "when": "view == cumulusci.services && viewItem == cumulusci.service.default",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cumulusci.service.rename",
+          "when": "view == cumulusci.services && viewItem == cumulusci.service",
+          "group": "navigation@3"
+        },
+        {
+          "command": "cumulusci.service.rename",
+          "when": "view == cumulusci.services && viewItem == cumulusci.service.default",
+          "group": "navigation@3"
+        },
+        {
+          "command": "cumulusci.service.remove",
+          "when": "view == cumulusci.services && viewItem == cumulusci.service",
+          "group": "navigation@4"
+        },
+        {
+          "command": "cumulusci.service.remove",
+          "when": "view == cumulusci.services && viewItem == cumulusci.service.default",
+          "group": "navigation@4"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run package",
+    "compile": "pnpm run check-types && pnpm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.18.10",
+    "@types/vscode": "^1.105.0",
+    "@typescript-eslint/eslint-plugin": "^8.46.1",
+    "@typescript-eslint/parser": "^8.46.1",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.25.11",
+    "eslint": "^9.37.0",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.9.3"
+  }
+}
