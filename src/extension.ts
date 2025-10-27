@@ -69,6 +69,27 @@ interface OrgQuickPickItem extends vscode.QuickPickItem {
 	readonly manual?: boolean;
 }
 
+interface TaskQuickPickEntry extends vscode.QuickPickItem {
+	readonly taskName: string;
+	readonly folder: vscode.WorkspaceFolder;
+	readonly data?: CciRecord;
+}
+
+interface FlowQuickPickEntry extends vscode.QuickPickItem {
+	readonly flowName: string;
+	readonly folder: vscode.WorkspaceFolder;
+	readonly data?: CciRecord;
+}
+
+interface ServiceQuickPickEntry extends vscode.QuickPickItem {
+	readonly folder: vscode.WorkspaceFolder;
+	readonly serviceType: string;
+	readonly serviceName: string;
+	readonly typeLabel?: string;
+	readonly data?: CciRecord;
+	readonly isDefault: boolean;
+}
+
 interface ServiceListRow {
 	type: string;
 	name?: string;
@@ -2657,6 +2678,396 @@ export function activate(context: vscode.ExtensionContext) {
 		return args;
 	};
 
+	type OrgQuickPickItemWithFolder = OrgQuickPickItem & { folder: vscode.WorkspaceFolder };
+
+	const buildGroupPath = (segments: string[]): string => segments
+		.map((segment) => segment?.trim())
+		.filter((segment): segment is string => Boolean(segment && segment.length > 0))
+		.join(' › ');
+
+	const collectTaskQuickPicks = (items: CciItem[], folder: vscode.WorkspaceFolder): TaskQuickPickEntry[] => {
+		const picks: TaskQuickPickEntry[] = [];
+		const visit = (item: CciItem, parents: string[]) => {
+			const label = toTreeItemLabelString(item.label);
+			const nextParents =
+				item.itemKind === 'group' || item.itemKind === 'folder'
+					? [...parents, label].filter((segment): segment is string => Boolean(segment && segment.length > 0))
+					: parents;
+			if (item.itemKind === 'task') {
+				const data = (item.data ?? undefined) as CciRecord | undefined;
+				const fallback = label && label.trim().length > 0 ? label : 'task';
+				const taskName = pickFirstString(data, ['name', 'task_name']) ?? fallback;
+				const description = toDescriptionString(item.description);
+				const groupPath = buildGroupPath(parents);
+				const detailParts = [folder.name];
+				if (groupPath.length > 0) {
+					detailParts.push(groupPath);
+				}
+				const detail = detailParts.join(' • ');
+				picks.push({
+					label: taskName,
+					description,
+					detail,
+					taskName,
+					folder,
+					data
+				});
+			}
+			for (const child of item.children ?? []) {
+				visit(child, nextParents);
+			}
+		};
+		for (const item of items) {
+			visit(item, []);
+		}
+		return picks;
+	};
+
+	const collectFlowQuickPicks = (items: CciItem[], folder: vscode.WorkspaceFolder): FlowQuickPickEntry[] => {
+		const picks: FlowQuickPickEntry[] = [];
+		const visit = (item: CciItem, parents: string[]) => {
+			const label = toTreeItemLabelString(item.label);
+			const nextParents =
+				item.itemKind === 'group' || item.itemKind === 'folder'
+					? [...parents, label].filter((segment): segment is string => Boolean(segment && segment.length > 0))
+					: parents;
+			if (item.itemKind === 'flow') {
+				const data = (item.data ?? undefined) as CciRecord | undefined;
+				const fallback = label && label.trim().length > 0 ? label : 'flow';
+				const flowName = pickFirstString(data, ['name', 'flow']) ?? fallback;
+				const description = toDescriptionString(item.description);
+				const groupPath = buildGroupPath(parents);
+				const detailParts = [folder.name];
+				if (groupPath.length > 0) {
+					detailParts.push(groupPath);
+				}
+				const detail = detailParts.join(' • ');
+				picks.push({
+					label: flowName,
+					description,
+					detail,
+					flowName,
+					folder,
+					data
+				});
+			}
+			for (const child of item.children ?? []) {
+				visit(child, nextParents);
+			}
+		};
+		for (const item of items) {
+			visit(item, []);
+		}
+		return picks;
+	};
+
+	const collectServiceQuickPicks = (items: CciItem[], folder: vscode.WorkspaceFolder): ServiceQuickPickEntry[] => {
+		const picks: ServiceQuickPickEntry[] = [];
+		for (const item of items) {
+			if (item.itemKind === 'service') {
+				const data = (item.data ?? undefined) as CciRecord | undefined;
+				const label = toTreeItemLabelString(item.label) || pickFirstString(data, ['name']) || 'service';
+				const serviceType = pickFirstString(data, ['type']) ?? '';
+				const typeLabel = pickFirstString(data, ['typeLabel']);
+				const description = toDescriptionString(item.description);
+				const detailParts = [folder.name];
+				if (typeLabel) {
+					detailParts.push(typeLabel);
+				} else if (serviceType) {
+					detailParts.push(serviceType);
+				}
+				const detail = detailParts.join(' • ');
+				picks.push({
+					label,
+					description,
+					detail,
+					folder,
+					serviceType,
+					serviceName: label,
+					typeLabel,
+					data,
+					isDefault: getBoolean(data, ['isDefault']) ?? false
+				});
+				continue;
+			}
+			if (item.children) {
+				picks.push(...collectServiceQuickPicks(item.children, folder));
+			}
+		}
+		return picks;
+	};
+
+	const gatherTaskQuickPickItems = async (): Promise<TaskQuickPickEntry[]> => {
+		const folders = await service.getProjectFolders();
+		const entries: TaskQuickPickEntry[] = [];
+		for (const folder of folders) {
+			const items = await service.listTasks(folder);
+			entries.push(...collectTaskQuickPicks(items, folder));
+		}
+		return entries.sort((a, b) => {
+			const labelComparison = a.label.localeCompare(b.label);
+			if (labelComparison !== 0) {
+				return labelComparison;
+			}
+			return (a.detail ?? '').localeCompare(b.detail ?? '');
+		});
+	};
+
+	const gatherFlowQuickPickItems = async (): Promise<FlowQuickPickEntry[]> => {
+		const folders = await service.getProjectFolders();
+		const entries: FlowQuickPickEntry[] = [];
+		for (const folder of folders) {
+			const items = await service.listFlows(folder);
+			entries.push(...collectFlowQuickPicks(items, folder));
+		}
+		return entries.sort((a, b) => {
+			const labelComparison = a.label.localeCompare(b.label);
+			if (labelComparison !== 0) {
+				return labelComparison;
+			}
+			return (a.detail ?? '').localeCompare(b.detail ?? '');
+		});
+	};
+
+	const gatherServiceQuickPickItems = async (): Promise<ServiceQuickPickEntry[]> => {
+		const folders = await service.getProjectFolders();
+		const entries: ServiceQuickPickEntry[] = [];
+		for (const folder of folders) {
+			const items = await service.listServices(folder);
+			entries.push(...collectServiceQuickPicks(items, folder));
+		}
+		return entries.sort((a, b) => {
+			const labelComparison = a.label.localeCompare(b.label);
+			if (labelComparison !== 0) {
+				return labelComparison;
+			}
+			return (a.detail ?? '').localeCompare(b.detail ?? '');
+		});
+	};
+
+	const selectTask = async (
+		target: unknown,
+		placeHolder: string
+	): Promise<TaskQuickPickEntry | undefined> => {
+		const treeItem = resolveTreeItem(target);
+		if (treeItem) {
+			try {
+				ensureItemKind(treeItem, 'task', 'Task command');
+			} catch (error) {
+				vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
+				return undefined;
+			}
+			const folder = requireWorkspaceFolder(treeItem);
+			const data = (treeItem.data ?? undefined) as CciRecord | undefined;
+			const fallback = toTreeItemLabelString(treeItem.label) || 'task';
+			const taskName = pickFirstString(data, ['name', 'task_name']) ?? fallback;
+			const description = toDescriptionString(treeItem.description);
+			return {
+				label: taskName,
+				description,
+				detail: folder.name,
+				taskName,
+				folder,
+				data
+			};
+		}
+
+		const picks = await gatherTaskQuickPickItems();
+		if (picks.length === 0) {
+			vscode.window.showWarningMessage('No CCI tasks found in the current workspace.');
+			return undefined;
+		}
+		return vscode.window.showQuickPick(picks, {
+			placeHolder,
+			matchOnDescription: true,
+			matchOnDetail: true
+		});
+	};
+
+	const selectFlow = async (
+		target: unknown,
+		placeHolder: string
+	): Promise<FlowQuickPickEntry | undefined> => {
+		const treeItem = resolveTreeItem(target);
+		if (treeItem) {
+			try {
+				ensureItemKind(treeItem, 'flow', 'Flow command');
+			} catch (error) {
+				vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
+				return undefined;
+			}
+			const folder = requireWorkspaceFolder(treeItem);
+			const data = (treeItem.data ?? undefined) as CciRecord | undefined;
+			const fallback = toTreeItemLabelString(treeItem.label) || 'flow';
+			const flowName = pickFirstString(data, ['name', 'flow']) ?? fallback;
+			const description = toDescriptionString(treeItem.description);
+			return {
+				label: flowName,
+				description,
+				detail: folder.name,
+				flowName,
+				folder,
+				data
+			};
+		}
+
+		const picks = await gatherFlowQuickPickItems();
+		if (picks.length === 0) {
+			vscode.window.showWarningMessage('No CCI flows found in the current workspace.');
+			return undefined;
+		}
+		return vscode.window.showQuickPick(picks, {
+			placeHolder,
+			matchOnDescription: true,
+			matchOnDetail: true
+		});
+	};
+
+	const selectOrg = async (
+		target: unknown,
+		placeHolder: string
+	): Promise<{ alias: string; folder: vscode.WorkspaceFolder; data?: CciRecord; label: string; description?: string } | undefined> => {
+		const treeItem = resolveTreeItem(target);
+		if (treeItem) {
+			try {
+				ensureItemKind(treeItem, 'org', placeHolder);
+			} catch (error) {
+				vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
+				return undefined;
+			}
+			const folder = requireWorkspaceFolder(treeItem);
+			const data = (treeItem.data ?? undefined) as CciRecord | undefined;
+			const fallback = toTreeItemLabelString(treeItem.label) || 'org';
+			const alias = pickFirstString(data, ['alias', 'name', 'org_name', 'config_name']) ?? fallback;
+			const description = toDescriptionString(treeItem.description);
+			return { alias, folder, data, label: alias, description };
+		}
+
+		const folders = await service.getProjectFolders();
+		if (folders.length === 0) {
+			vscode.window.showWarningMessage('No CumulusCI projects detected in the current workspace.');
+			return undefined;
+		}
+
+		const picks: OrgQuickPickItemWithFolder[] = [];
+		for (const folder of folders) {
+			const orgs = await service.getOrgQuickPickItems(folder);
+			for (const org of orgs) {
+				const detailParts = [folder.name];
+				if (org.detail) {
+					detailParts.push(org.detail);
+				}
+				picks.push({
+					...org,
+					detail: detailParts.join(' • '),
+					folder
+				});
+			}
+		}
+
+		const manualOptions: OrgQuickPickItemWithFolder[] = folders.map((folder) => ({
+			label: `$(edit) Enter alias for ${folder.name}…`,
+			description: folder.uri.fsPath,
+			detail: folder.name,
+			alias: '',
+			data: undefined,
+			orgCreated: false,
+			expired: false,
+			isScratch: false,
+			definitionOnly: false,
+			definitionMissing: false,
+			manual: true,
+			folder
+		}));
+
+		const choice = await vscode.window.showQuickPick<OrgQuickPickItemWithFolder>([...picks, ...manualOptions], {
+			placeHolder,
+			matchOnDescription: true,
+			matchOnDetail: true
+		});
+		if (!choice) {
+			return undefined;
+		}
+		if (choice.manual) {
+			const manualAlias = await vscode.window.showInputBox({
+				prompt: 'Enter the org alias to use',
+				placeHolder: 'Org alias',
+				ignoreFocusOut: true
+			});
+			const trimmed = manualAlias?.trim();
+			if (!trimmed) {
+				return undefined;
+			}
+			return {
+				alias: trimmed,
+				folder: choice.folder,
+				data: undefined,
+				label: trimmed,
+				description: choice.description
+			};
+		}
+		return {
+			alias: choice.alias,
+			folder: choice.folder,
+			data: choice.data,
+			label: choice.label,
+			description: choice.description
+		};
+	};
+
+	const selectService = async (
+		target: unknown,
+		placeHolder: string
+	): Promise<ServiceQuickPickEntry | undefined> => {
+		const treeItem = resolveTreeItem(target);
+		if (treeItem) {
+			try {
+				ensureItemKind(treeItem, 'service', placeHolder);
+			} catch (error) {
+				vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
+				return undefined;
+			}
+			const folder = requireWorkspaceFolder(treeItem);
+			const data = (treeItem.data ?? undefined) as CciRecord | undefined;
+			const serviceType = pickFirstString(data, ['type']);
+			const serviceName = pickFirstString(data, ['name']) ?? toTreeItemLabelString(treeItem.label) ?? 'service';
+			const typeLabel = pickFirstString(data, ['typeLabel']);
+			if (!serviceType) {
+				vscode.window.showErrorMessage('Service type is missing for this item.');
+				return undefined;
+			}
+			const description = toDescriptionString(treeItem.description);
+			const detailParts = [folder.name];
+			if (typeLabel) {
+				detailParts.push(typeLabel);
+			} else {
+				detailParts.push(serviceType);
+			}
+			return {
+				label: serviceName,
+				description,
+				detail: detailParts.join(' • '),
+				folder,
+				serviceType,
+				serviceName,
+				typeLabel,
+				data,
+				isDefault: getBoolean(data, ['isDefault']) ?? false
+			};
+		}
+
+		const picks = await gatherServiceQuickPickItems();
+		if (picks.length === 0) {
+			vscode.window.showWarningMessage('No CCI services found in the current workspace.');
+			return undefined;
+		}
+		return vscode.window.showQuickPick(picks, {
+			placeHolder,
+			matchOnDescription: true,
+			matchOnDetail: true
+		});
+	};
+
 	context.subscriptions.push(
 		vscode.window.registerTreeDataProvider('cumulusci.orgs', providers.orgs),
 		vscode.window.registerTreeDataProvider('cumulusci.tasks', providers.tasks),
@@ -2777,22 +3188,19 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		}),
 		vscode.commands.registerCommand('cumulusci.service.showInfo', async (target?: unknown) => {
-			const item = resolveTreeItem(target);
-			if (!item) {
-				return;
-			}
 			try {
-				ensureItemKind(item, 'service', 'Show Service Info');
-				const folder = requireWorkspaceFolder(item);
-				const data = (item.data ?? {}) as CciRecord;
-				const type = pickFirstString(data, ['type']);
-				if (!type) {
-					throw new Error('Service type is missing for this item.');
+				const selection = await selectService(target, 'Select a service to inspect');
+				if (!selection) {
+					return;
 				}
-				const name = pickFirstString(data, ['name']);
-				const typeLabel = pickFirstString(data, ['typeLabel']) ?? formatServiceTypeLabel(type);
-				const info = await service.getServiceInfo(folder, type, name);
-				const markdown = formatServiceInfoMarkdown(typeLabel, name, info);
+				const { folder, serviceType, serviceName, typeLabel } = selection;
+				if (!serviceType) {
+					vscode.window.showErrorMessage('Service type is required to show service info.');
+					return;
+				}
+				const resolvedLabel = typeLabel ?? formatServiceTypeLabel(serviceType);
+				const info = await service.getServiceInfo(folder, serviceType, serviceName);
+				const markdown = formatServiceInfoMarkdown(resolvedLabel, serviceName, info);
 				const document = await vscode.workspace.openTextDocument({ language: 'markdown', content: markdown });
 				await vscode.window.showTextDocument(document, { preview: true });
 			} catch (error) {
@@ -2958,18 +3366,15 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		}),
 		vscode.commands.registerCommand('cumulusci.service.setDefault', async (target?: unknown) => {
-			const item = resolveTreeItem(target);
-			if (!item) {
-				return;
-			}
 			try {
-				ensureItemKind(item, 'service', 'Set Service Default');
-				const folder = requireWorkspaceFolder(item);
-				const data = (item.data ?? {}) as CciRecord;
-				const type = pickFirstString(data, ['type']);
-				const name = pickFirstString(data, ['name']);
-				if (!type || !name) {
-					throw new Error('Service type or name is missing.');
+				const selection = await selectService(target, 'Select a service to set as default');
+				if (!selection) {
+					return;
+				}
+				const { folder, serviceType, serviceName } = selection;
+				if (!serviceType || !serviceName) {
+					vscode.window.showErrorMessage('Service type and name are required to set a default.');
+					return;
 				}
 				const scope = await vscode.window.showQuickPick(
 					[
@@ -2985,7 +3390,7 @@ export function activate(context: vscode.ExtensionContext) {
 				if (scope.flag) {
 					args.push(scope.flag);
 				}
-				args.push(type, name);
+				args.push(serviceType, serviceName);
 				const result = await service.runCciCommand(folder, args);
 				if (result.trim().length > 0) {
 					output.appendLine(result.trim());
@@ -2997,62 +3402,56 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		}),
 		vscode.commands.registerCommand('cumulusci.service.remove', async (target?: unknown) => {
-			const item = resolveTreeItem(target);
-			if (!item) {
-				return;
-			}
 			try {
-				ensureItemKind(item, 'service', 'Remove Service');
-				const folder = requireWorkspaceFolder(item);
-				const data = (item.data ?? {}) as CciRecord;
-				const type = pickFirstString(data, ['type']);
-				const name = pickFirstString(data, ['name']);
-				if (!type || !name) {
-					throw new Error('Service type or name is missing.');
+				const selection = await selectService(target, 'Select a service to remove');
+				if (!selection) {
+					return;
 				}
-				const label = toTreeItemLabelString(item.label) || name;
+				const { folder, serviceType, serviceName, typeLabel } = selection;
+				if (!serviceType || !serviceName) {
+					vscode.window.showErrorMessage('Service type and name are required to remove a service.');
+					return;
+				}
+				const typeDisplay = typeLabel ?? formatServiceTypeLabel(serviceType);
 				const confirmed = await vscode.window.showWarningMessage(
-					`Remove service "${label}" (${type})?`,
+					`Remove service "${serviceName}" (${typeDisplay})?`,
 					{ modal: true },
 					'Remove'
 				);
 				if (confirmed !== 'Remove') {
 					return;
 				}
-				await service.runCciCommand(folder, ['service', 'remove', type, name]);
-				vscode.window.showInformationMessage(`Removed service "${label}" (${type}).`);
+				await service.runCciCommand(folder, ['service', 'remove', serviceType, serviceName]);
+				vscode.window.showInformationMessage(`Removed service "${serviceName}" (${typeDisplay}).`);
 				refresh('services');
 			} catch (error) {
 				vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
 			}
 		}),
 		vscode.commands.registerCommand('cumulusci.service.rename', async (target?: unknown) => {
-			const item = resolveTreeItem(target);
-			if (!item) {
-				return;
-			}
 			try {
-				ensureItemKind(item, 'service', 'Rename Service');
-				const folder = requireWorkspaceFolder(item);
-				const data = (item.data ?? {}) as CciRecord;
-				const type = pickFirstString(data, ['type']);
-				const currentName = pickFirstString(data, ['name']);
-				if (!type || !currentName) {
-					throw new Error('Service type or name is missing.');
+				const selection = await selectService(target, 'Select a service to rename');
+				if (!selection) {
+					return;
+				}
+				const { folder, serviceType, serviceName } = selection;
+				if (!serviceType || !serviceName) {
+					vscode.window.showErrorMessage('Service type and name are required to rename a service.');
+					return;
 				}
 				const newNameInput = await vscode.window.showInputBox({
 					prompt: 'Enter the new service name',
-					value: currentName,
+					value: serviceName,
 					ignoreFocusOut: true
 				});
 				if (newNameInput === undefined) {
 					return;
 				}
 				const newName = newNameInput.trim();
-				if (!newName || newName === currentName) {
+				if (!newName || newName === serviceName) {
 					return;
 				}
-				await service.runCciCommand(folder, ['service', 'rename', type, currentName, newName]);
+				await service.runCciCommand(folder, ['service', 'rename', serviceType, serviceName, newName]);
 				refresh('services');
 			} catch (error) {
 				vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
@@ -3063,55 +3462,46 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('cumulusci.runTask', async (target?: unknown) => {
 			try {
-				const item = resolveTreeItem(target);
-				if (!item) {
+				const selection = await selectTask(target, 'Select a CCI task to run');
+				if (!selection) {
 					return;
 				}
-				ensureItemKind(item, 'task', 'Run Task');
-				const folder = requireWorkspaceFolder(item);
-				const fallbackName = toTreeItemLabelString(item.label) || 'task';
-				const name = pickFirstString(item.data, ['name', 'task_name']) ?? fallbackName;
-				const terminalName = `CCI Task: ${name}`;
+				const { folder, taskName } = selection;
+				const terminalName = `CCI Task: ${taskName}`;
 				let terminal = vscode.window.terminals.find((t) => t.name === terminalName);
 				if (!terminal) {
 					terminal = vscode.window.createTerminal({ name: terminalName, cwd: folder.uri });
 				}
 				terminal.show();
-				terminal.sendText(`cci task run ${name} `, false);
+				terminal.sendText(`cci task run ${taskName} `, false);
 			} catch (error) {
 				vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
 			}
 		}),
 		vscode.commands.registerCommand('cumulusci.copyTaskCommand', async (target?: unknown) => {
-			const item = resolveTreeItem(target);
-			if (!item) {
-				return;
-			}
 			try {
-				ensureItemKind(item, 'task', 'Copy Task Command');
-				const fallbackName = toTreeItemLabelString(item.label) || 'task';
-				const name = pickFirstString(item.data, ['name', 'task_name']) ?? fallbackName;
-				await vscode.env.clipboard.writeText(`cci task run ${name}`);
-				vscode.window.showInformationMessage(`Copied: cci task run ${name}`);
+				const selection = await selectTask(target, 'Select a CCI task to copy');
+				if (!selection) {
+					return;
+				}
+				await vscode.env.clipboard.writeText(`cci task run ${selection.taskName}`);
+				vscode.window.showInformationMessage(`Copied: cci task run ${selection.taskName}`);
 			} catch (error) {
 				vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
 			}
 		}),
 		vscode.commands.registerCommand('cumulusci.runFlow', async (target?: unknown) => {
-			const item = resolveTreeItem(target);
-			if (!item) {
-				return;
-			}
 			try {
-				ensureItemKind(item, 'flow', 'Run Flow');
-				const folder = requireWorkspaceFolder(item);
-				const fallbackFlowName = toTreeItemLabelString(item.label) || 'flow';
-				const flowName = pickFirstString(item.data, ['name', 'flow']) ?? fallbackFlowName;
-				const selection = await pickOrgForExecution(folder, 'Select an org to run this flow against');
+				const selection = await selectFlow(target, 'Select a CCI flow to run');
 				if (!selection) {
 					return;
 				}
-				const alias = selection.alias.trim();
+				const { folder, flowName } = selection;
+				const orgSelection = await pickOrgForExecution(folder, 'Select an org to run this flow against');
+				if (!orgSelection) {
+					return;
+				}
+				const alias = orgSelection.alias.trim();
 				if (!alias) {
 					return;
 				}
@@ -3142,74 +3532,67 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		}),
 		vscode.commands.registerCommand('cumulusci.copyFlowCommand', async (target?: unknown) => {
-			const item = resolveTreeItem(target);
-			if (!item) {
-				return;
-			}
 			try {
-				ensureItemKind(item, 'flow', 'Copy Flow Command');
-				const fallbackFlowName = toTreeItemLabelString(item.label) || 'flow';
-				const flowName = pickFirstString(item.data, ['name', 'flow']) ?? fallbackFlowName;
-				await vscode.env.clipboard.writeText(`cci flow run ${flowName} --org <org>`);
-				vscode.window.showInformationMessage(`Copied: cci flow run ${flowName} --org <org>`);
+				const selection = await selectFlow(target, 'Select a CCI flow to copy');
+				if (!selection) {
+					return;
+				}
+				await vscode.env.clipboard.writeText(`cci flow run ${selection.flowName} --org <org>`);
+				vscode.window.showInformationMessage(`Copied: cci flow run ${selection.flowName} --org <org>`);
 			} catch (error) {
 				vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
 			}
 		}),
 		vscode.commands.registerCommand('cumulusci.org.showActions', async (target?: unknown) => {
-			const item = resolveTreeItem(target);
-			if (!item) {
-				return;
-			}
-				try {
-					ensureItemKind(item, 'org', 'Org Actions');
-					const folder = requireWorkspaceFolder(item);
-					const fallbackAlias = toTreeItemLabelString(item.label) || 'org';
-					const alias = pickFirstString(item.data, ['alias', 'name', 'org_name', 'config_name']) ?? fallbackAlias;
-					const descriptionText = toDescriptionString(item.description);
-					const orgDescription = descriptionText ? ` (${descriptionText})` : '';
+			try {
+				const selection = await selectOrg(target, 'Select an org to manage');
+				if (!selection) {
+					return;
+				}
+				const { folder, alias, data, description } = selection;
+				const orgData = (data ?? {}) as CciRecord;
+				const orgDescription = description ? ` (${description})` : '';
 
 				const basePick: OrgQuickPickItem = {
 					label: alias,
-					description: descriptionText,
+					description,
 					detail: undefined,
 					alias,
-					data: item.data,
-					orgCreated: getBoolean(item.data, ['orgCreated']) ?? false,
-					expired: getBoolean(item.data, ['expired']) ?? false,
-					isScratch: getBoolean(item.data, ['scratch', 'scratch_org', 'is_scratch', 'isScratch']) ?? false,
-					definitionOnly: getBoolean(item.data, ['definitionOnly']) ?? false,
-					definitionMissing: getBoolean(item.data, ['definitionMissing']) ?? false,
+					data,
+					orgCreated: getBoolean(orgData, ['orgCreated']) ?? false,
+					expired: getBoolean(orgData, ['expired']) ?? false,
+					isScratch: getBoolean(orgData, ['scratch', 'scratch_org', 'is_scratch', 'isScratch']) ?? false,
+					definitionOnly: getBoolean(orgData, ['definitionOnly']) ?? false,
+					definitionMissing: getBoolean(orgData, ['definitionMissing']) ?? false,
 					manual: false
 				};
 
-				const picks: Array<OrgQuickPickItem & { action: 'open' | 'info' | 'default' | 'copy' }>
-					= [
-						{
-							...basePick,
-							label: 'Open in Browser',
-							detail: `cci org browser ${alias}`,
-							action: 'open'
-						},
-						{
-							...basePick,
-							label: 'Show Org Info',
-							detail: `cci org info ${alias}`,
-							action: 'info'
-						},
-						{
-							...basePick,
-							label: 'Set as Default Org',
-							detail: `cci org default ${alias}`,
-							action: 'default'
-						},
-						{
-							...basePick,
-							label: 'Copy Org Alias',
-							detail: alias,
-							action: 'copy'
-						}
-					];
+				const picks: Array<OrgQuickPickItem & { action: 'open' | 'info' | 'default' | 'copy' }> = [
+					{
+						...basePick,
+						label: 'Open in Browser',
+						detail: `cci org browser ${alias}`,
+						action: 'open'
+					},
+					{
+						...basePick,
+						label: 'Show Org Info',
+						detail: `cci org info ${alias}`,
+						action: 'info'
+					},
+					{
+						...basePick,
+						label: 'Set as Default Org',
+						detail: `cci org default ${alias}`,
+						action: 'default'
+					},
+					{
+						...basePick,
+						label: 'Copy Org Alias',
+						detail: alias,
+						action: 'copy'
+					}
+				];
 
 				const pick = await vscode.window.showQuickPick(picks, {
 					placeHolder: `Choose an action for ${alias}${orgDescription}`
@@ -3249,15 +3632,12 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		}),
 		vscode.commands.registerCommand('cumulusci.org.openInBrowser', async (target?: unknown) => {
-			const item = resolveTreeItem(target);
-			if (!item) {
-				return;
-			}
-				try {
-					ensureItemKind(item, 'org', 'Open Org in Browser');
-					const folder = requireWorkspaceFolder(item);
-					const fallbackAlias = toTreeItemLabelString(item.label) || 'org';
-					const alias = pickFirstString(item.data, ['alias', 'name', 'org_name', 'config_name']) ?? fallbackAlias;
+			try {
+				const selection = await selectOrg(target, 'Select an org to open in the browser');
+				if (!selection) {
+					return;
+				}
+				const { folder, alias } = selection;
 				output.appendLine(`$ cci org browser ${alias}`);
 				await service.runCciCommand(folder, ['org', 'browser', alias]);
 			} catch (error) {
@@ -3265,15 +3645,12 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		}),
 		vscode.commands.registerCommand('cumulusci.org.showInfo', async (target?: unknown) => {
-			const item = resolveTreeItem(target);
-			if (!item) {
-				return;
-			}
 			try {
-				ensureItemKind(item, 'org', 'Show Org Info');
-				const folder = requireWorkspaceFolder(item);
-				const fallbackAlias = toTreeItemLabelString(item.label) || 'org';
-				const alias = pickFirstString(item.data, ['alias', 'name', 'org_name', 'config_name']) ?? fallbackAlias;
+				const selection = await selectOrg(target, 'Select an org to inspect');
+				if (!selection) {
+					return;
+				}
+				const { folder, alias } = selection;
 				output.appendLine(`$ cci org info ${alias} --json`);
 				await showOrgInfoDocument(folder, alias);
 			} catch (error) {
@@ -3281,15 +3658,12 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		}),
 		vscode.commands.registerCommand('cumulusci.org.setDefault', async (target?: unknown) => {
-			const item = resolveTreeItem(target);
-			if (!item) {
-				return;
-			}
 			try {
-				ensureItemKind(item, 'org', 'Set Default Org');
-				const folder = requireWorkspaceFolder(item);
-				const fallbackAlias = toTreeItemLabelString(item.label) || 'org';
-				const alias = pickFirstString(item.data, ['alias', 'name', 'org_name', 'config_name']) ?? fallbackAlias;
+				const selection = await selectOrg(target, 'Select an org to set as default');
+				if (!selection) {
+					return;
+				}
+				const { folder, alias } = selection;
 				output.appendLine(`$ cci org default ${alias}`);
 				const result = await service.runCciCommand(folder, ['org', 'default', alias]);
 				if (result.trim().length > 0) {
@@ -3302,16 +3676,13 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		}),
 		vscode.commands.registerCommand('cumulusci.copyOrgAlias', async (target?: unknown) => {
-			const item = resolveTreeItem(target);
-			if (!item) {
-				return;
-			}
 			try {
-				ensureItemKind(item, 'org', 'Copy Org Alias');
-				const fallbackAlias = toTreeItemLabelString(item.label) || 'org';
-				const alias = pickFirstString(item.data, ['alias', 'name', 'org_name', 'config_name']) ?? fallbackAlias;
-				await vscode.env.clipboard.writeText(alias);
-				vscode.window.showInformationMessage(`Copied org alias: ${alias}`);
+				const selection = await selectOrg(target, 'Select an org alias to copy');
+				if (!selection) {
+					return;
+				}
+				await vscode.env.clipboard.writeText(selection.alias);
+				vscode.window.showInformationMessage(`Copied org alias: ${selection.alias}`);
 			} catch (error) {
 				vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
 			}
