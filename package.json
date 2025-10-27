@@ -2,7 +2,7 @@
   "name": "cumulusci",
   "displayName": "CumulusCI Explorer",
   "description": "CumulusCI extension for Visual Studio Code",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "dipakparmar",
   "repository": "https://github.com/dipakparmar/cumulusci-vscode",
   "icon": "media/images/cci-logo.png",
